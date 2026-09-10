@@ -1,0 +1,23 @@
+# Python
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]
+
+# Build output
+dist/
+build/
+*.spec.bak
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# User config (shortcut, preferences) - copy config.example.json to config.json
+config.json
+
+# Claude Code local config
+.claude/
