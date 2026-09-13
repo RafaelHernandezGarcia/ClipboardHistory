@@ -484,6 +484,7 @@ def main():
         _lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         _lock_socket.bind(("127.0.0.1", LOCK_PORT))
     except socket.error:
+        print(f"[lock] another copy already holds 127.0.0.1:{LOCK_PORT}; exiting")
         show_already_running_notification()
         sys.exit(0)
     app = ClipboardHistoryApp()

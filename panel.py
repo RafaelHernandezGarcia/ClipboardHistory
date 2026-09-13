@@ -32,6 +32,7 @@ PANEL_W = 420
 PANEL_H = 540
 RADIUS = 14
 ROW_PAD = 10
+WHEEL_STEP_PX = 40   # pixels per mouse-wheel notch (trackpads scroll 1:1)
 
 
 class Theme:
@@ -400,6 +401,25 @@ class HistoryList(QListView):
                 d.hover_btn = None
                 self.viewport().update()
         super().mouseMoveEvent(event)
+
+    def wheelEvent(self, event):
+        """Gentle, predictable scrolling. Qt's per-pixel mode scrolls
+        wheelScrollLines x singleStep per tick, and singleStep is derived
+        from the (tall) rows, so one notch flew past several items."""
+        sb = self.verticalScrollBar()
+        pd = event.pixelDelta()
+        ad = event.angleDelta()
+        if not pd.isNull():
+            delta = pd.y()                      # trackpad: 1:1 with the fingers
+        else:
+            delta = int(round(ad.y() / 120.0 * WHEEL_STEP_PX))
+        if os.environ.get("CLIPBOARDHISTORY_DEBUG"):
+            print(f"[wheel] pixel={pd.y()} angle={ad.y()} step={sb.singleStep()} -> {delta}px")
+        if delta == 0:
+            event.ignore()
+            return
+        sb.setValue(sb.value() - delta)
+        event.accept()
 
     def leaveEvent(self, event):
         d = self.itemDelegate()

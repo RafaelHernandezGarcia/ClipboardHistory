@@ -16,6 +16,9 @@ launchctl kickstart -k gui/$(id -u)/com.clipboardhistory.app
 ```
 Foreground dev run: `.venv/bin/python main.py` (quit the agent copy first
 with `main.py --quit`, or launchctl bootout, or the two fight over the port).
+Going back to the agent: `--quit` the dev copy, then `launchctl kickstart -k`
+(a plain bootstrap right after --quit can find the port still held for a
+second, exit 0 with "[lock] another copy..." and NOT be restarted).
 
 Windows: install.bat -> %LOCALAPPDATA%\ClipboardHistory + private venv +
 Start Menu / Startup shortcuts (no exe: unsigned binaries trip endpoint
@@ -69,6 +72,17 @@ Two mechanisms, both needed: Qt WindowDeactivate (posted when the panel
 resigns key) and a global NSEvent mouse-down monitor (no permission needed
 for mouse events) in platform_utils.install_outside_click_monitor. The
 hotkey toggles: pressing it while open closes the panel.
+
+## Scrolling (2026-09-13 complaint: "scrolls waaaay too fast")
+
+QListView in ScrollPerPixel mode sets the scrollbar singleStep to a row
+height (158 px with image rows) and Qt scrolls wheelScrollLines (3) x
+singleStep per 120 angle units. macOS delivers one wheel notch as ~18
+momentum events, so a notch flew >1000 px. HistoryList.wheelEvent now
+uses pixelDelta directly (macOS fills it for mice too: a notch sums to
+~70 px, same as Finder) and WHEEL_STEP_PX per notch when only angleDelta
+exists (Windows). Measure with CLIPBOARDHISTORY_DEBUG=1: it prints
+[wheel] lines; synthetic notches come from CGEventCreateScrollWheelEvent.
 
 ## Watcher details
 
