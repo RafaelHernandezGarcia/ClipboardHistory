@@ -72,7 +72,7 @@ if not errorlevel 1 (
     ping -n 4 127.0.0.1 >nul
 )
 :check_running
-"%PYTHON_EXE%" -c "import socket,sys;s=socket.socket();s.settimeout(0.3);sys.exit(0 if s.connect_ex(('127.0.0.1',47410)) else 1)" >nul 2>&1
+"%PYTHON_EXE%" -c "import socket,sys;s=socket.socket();s.settimeout(0.3);sys.exit(1 if s.connect_ex(('127.0.0.1',47410)) else 0)" >nul 2>&1
 if not errorlevel 1 (
     if defined QUIET (
         echo Waiting for the running copy to exit...
