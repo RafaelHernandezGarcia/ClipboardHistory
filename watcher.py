@@ -15,7 +15,14 @@ rendition of copied cells; the user wants the text).
 Items the app itself puts back on the clipboard are NOT re-parsed:
 main.py calls mark_own_change(item_id) right after writing, which records
 the new sequence number and simply moves the item to the top.
+
+Copies made while the app was not running: the last seen sequence number is
+kept in <data dir>/last_seq. If the clipboard changed since then, whatever is
+on it at startup is recorded (only the latest copy survives on the system
+clipboard, so that is all that can be recovered).
 """
+import os
+
 from PyQt6.QtCore import QObject, QTimer, QBuffer, QIODevice, QByteArray, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
@@ -32,7 +39,10 @@ class ClipboardWatcher(QObject):
         super().__init__(parent)
         self.store = store
         self.store_images = True
-        self._last_seq = clipboard_sequence()
+        self._seq_path = os.path.join(store.dir, "last_seq")
+        # Seen before we stopped; differs from the live counter if something
+        # was copied meanwhile, so the first check() records it.
+        self._last_seq = self._load_seen_seq()
         self._timer = QTimer(self)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self.check)
@@ -43,14 +53,32 @@ class ClipboardWatcher(QObject):
 
     def start(self):
         self._timer.start()
+        self.check()
 
     def stop(self):
         self._timer.stop()
 
     def mark_own_change(self, item_id):
         """We just wrote item_id to the clipboard: do not re-parse it."""
-        self._last_seq = clipboard_sequence()
+        self._set_seen_seq(clipboard_sequence())
         self.store.move_to_top(item_id)
+
+    def _load_seen_seq(self):
+        try:
+            with open(self._seq_path, "r", encoding="ascii") as f:
+                return int(f.read().strip())
+        except (OSError, ValueError):
+            return None
+
+    def _set_seen_seq(self, seq):
+        self._last_seq = seq
+        if seq is None:
+            return
+        try:
+            with open(self._seq_path, "w", encoding="ascii") as f:
+                f.write(str(seq))
+        except OSError as e:
+            print(f"[watcher] could not save last_seq: {e}")
 
     # ------------------------------------------------------------------
 
@@ -59,7 +87,7 @@ class ClipboardWatcher(QObject):
         if seq is not None:
             if seq == self._last_seq:
                 return
-            self._last_seq = seq
+            self._set_seen_seq(seq)
         try:
             self._ingest()
         except Exception as e:

@@ -479,8 +479,11 @@ def startup_enabled():
 
 
 def set_startup_enabled(enabled, python_exe, main_py, icon_path=None):
-    """macOS: LaunchAgent that runs `python_exe main_py` at login (and keeps
-    it alive). Windows: shortcut in the Startup folder (pythonw.exe so no
+    """macOS: LaunchAgent that runs `python_exe main_py` at login and
+    restarts it whenever it exits, clean exit included (copies made while it
+    is not running are lost for good). Interactive = no background CPU/IO
+    throttling of the 250 ms poll. Turning it off boots the agent out, which
+    also stops the running copy. Windows: shortcut in the Startup folder (pythonw.exe so no
     console window). Returns True on success."""
     if IS_MACOS:
         plist = _launch_agent_path()
@@ -504,11 +507,13 @@ def set_startup_enabled(enabled, python_exe, main_py, icon_path=None):
   <key>ProgramArguments</key>
   <array>
     <string>{python_exe}</string>
+    <string>-u</string>
     <string>{main_py}</string>
   </array>
   <key>WorkingDirectory</key><string>{workdir}</string>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardErrorPath</key><string>/tmp/clipboardhistory_agent.log</string>
   <key>StandardOutPath</key><string>/tmp/clipboardhistory_agent.log</string>
 </dict></plist>
@@ -573,6 +578,24 @@ def pin_as_accessory_app():
                 AppKit.NSApp.setActivationPolicy_(1)  # NSApplicationActivationPolicyAccessory
         except Exception:
             pass
+
+
+_activity = None  # retained for the process lifetime
+
+
+def disable_app_nap():
+    """macOS: opt out of App Nap. A napped menu-bar app gets its timers
+    stretched to seconds, and the watcher only sees the latest of several
+    copies made within one poll. Allows idle system sleep as normal."""
+    global _activity
+    if IS_MACOS and _activity is None:
+        try:
+            from Foundation import NSProcessInfo
+            # NSActivityUserInitiatedAllowingIdleSystemSleep
+            _activity = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+                0x00FFFFFF & ~(1 << 20), "clipboard history polls the clipboard")
+        except Exception as e:
+            print(f"[appnap] {e}")
 
 
 # ---------------------------------------------------------------------------

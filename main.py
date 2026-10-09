@@ -53,8 +53,13 @@ from platform_utils import (
     send_paste_keystroke, can_send_keystrokes, request_keystroke_permission,
     modifiers_released, prepare_panel_window, focus_panel_window,
     startup_enabled, set_startup_enabled, set_process_identity, pin_as_accessory_app,
-    install_outside_click_monitor,
+    install_outside_click_monitor, disable_app_nap, BUNDLE_ID,
 )
+
+# launchd sets XPC_SERVICE_NAME to the job label. Under the LaunchAgent any
+# exit is followed by a restart (KeepAlive), so "Quit" means "Restart" and a
+# frozen copy can simply be killed.
+UNDER_AGENT = os.environ.get("XPC_SERVICE_NAME") == BUNDLE_ID
 
 set_process_identity()
 
@@ -82,6 +87,7 @@ class ClipboardHistoryApp:
         self.app.setOrganizationName(APP_NAME)
         self.app.setQuitOnLastWindowClosed(False)
         pin_as_accessory_app()
+        disable_app_nap()
 
         self.config = app_config.load_config()
         self.hotkey_name = self.config.get("hotkey_name", app_config.DEFAULTS["hotkey_name"])
@@ -110,6 +116,8 @@ class ClipboardHistoryApp:
         self._setup_hotkey()
         self._setup_control_channel()
         self.watcher.start()
+        if UNDER_AGENT:
+            self._start_watchdog()
         print(f"[paste] automatic paste: "
               f"{'ready' if can_send_keystrokes() else 'needs the Accessibility permission'}")
 
@@ -199,7 +207,8 @@ class ClipboardHistoryApp:
         about_action.triggered.connect(self._show_about)
         menu.addAction(about_action)
         menu.addSeparator()
-        quit_action = QAction(f"Quit {APP_NAME}", menu)
+        # To really turn it off, untick Launch at Login (boots the agent out).
+        quit_action = QAction(f"Restart {APP_NAME}" if UNDER_AGENT else f"Quit {APP_NAME}", menu)
         quit_action.triggered.connect(self._quit)
         menu.addAction(quit_action)
 
@@ -449,6 +458,36 @@ class ClipboardHistoryApp:
         msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
         msg.exec()
 
+    WATCHDOG_TICK_S = 5
+    WATCHDOG_MISSES = 12  # 60 s without the event loop running -> restart
+
+    def _start_watchdog(self):
+        """Kill this process if the Qt event loop stops running (the watcher
+        lives on it), so launchd starts a fresh copy. Counts missed ticks
+        rather than comparing clocks: across system sleep both sides pause
+        and resume together, so a long sleep is not mistaken for a hang."""
+        import threading
+        self._heartbeat = 0
+        self._heartbeat_timer = QTimer()
+        self._heartbeat_timer.setInterval(1000)
+        self._heartbeat_timer.timeout.connect(self._beat)
+        self._heartbeat_timer.start()
+
+        def watch():
+            last, misses = -1, 0
+            while True:
+                time.sleep(self.WATCHDOG_TICK_S)
+                misses = misses + 1 if self._heartbeat == last else 0
+                last = self._heartbeat
+                if misses >= self.WATCHDOG_MISSES:
+                    print("[watchdog] event loop stuck for 60 s; exiting so launchd restarts it")
+                    os._exit(1)
+
+        threading.Thread(target=watch, name="watchdog", daemon=True).start()
+
+    def _beat(self):
+        self._heartbeat += 1
+
     def _quit(self):
         self.watcher.stop()
         if self._hotkey is not None:
@@ -482,9 +521,19 @@ def main():
     import socket
     try:
         _lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if not IS_WINDOWS:
+            # Lets a restart bind while the previous copy's connections sit in
+            # TIME_WAIT (~30 s), yet still fails while a copy is listening.
+            # (On Windows SO_REUSEADDR would let two copies share the port.)
+            _lock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         _lock_socket.bind(("127.0.0.1", LOCK_PORT))
     except socket.error:
         print(f"[lock] another copy already holds 127.0.0.1:{LOCK_PORT}; exiting")
+        if UNDER_AGENT:
+            # Started by the LaunchAgent while a dev copy (or one just told to
+            # --quit) still holds the port. Exit non-zero so launchd's
+            # KeepAlive retries in ~10 s; exit 0 would leave it off for good.
+            sys.exit(1)
         show_already_running_notification()
         sys.exit(0)
     app = ClipboardHistoryApp()

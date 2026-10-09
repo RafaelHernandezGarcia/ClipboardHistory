@@ -37,8 +37,11 @@ cd ~/Documents/ClipboardHistory
 
 Creates `.venv`, installs PyQt6 + pyobjc, writes a LaunchAgent
 (`~/Library/LaunchAgents/com.clipboardhistory.app.plist`) that starts the
-app at login and keeps it running, and starts it now. Log:
-`/tmp/clipboardhistory_agent.log`.
+app at login and restarts it within a second whenever it stops (crash,
+hang, or the menu's Restart item), and starts it now. Log:
+`/tmp/clipboardhistory_agent.log`. It also adds
+`~/Applications/ClipboardHistory.app`, so Cmd+Space "ClipboardHistory"
+starts it by hand. To really turn it off, untick Launch at Login.
 
 First automatic paste: macOS asks for the **Accessibility** permission
 (System Settings > Privacy & Security > Accessibility). The app shows a
@@ -64,6 +67,9 @@ it. Development: `run.bat` (console) or `run_hidden.bat`.
 .venv/bin/python main.py --show     # open / close the panel
 .venv/bin/python main.py --quit     # ask the running copy to exit
 ```
+
+Under the LaunchAgent `--quit` is a restart; for a foreground run stop the
+agent first: `launchctl bootout gui/$(id -u)/com.clipboardhistory.app`.
 
 Only one copy runs at a time (TCP lock on 127.0.0.1:47410; override with
 env `CLIPBOARDHISTORY_LOCK_PORT`). Env `CLIPBOARDHISTORY_DATA_DIR` points

@@ -14,11 +14,43 @@ from this folder. `./install_mac.sh` writes + (re)starts it; log in
 ```
 launchctl kickstart -k gui/$(id -u)/com.clipboardhistory.app
 ```
-Foreground dev run: `.venv/bin/python main.py` (quit the agent copy first
-with `main.py --quit`, or launchctl bootout, or the two fight over the port).
-Going back to the agent: `--quit` the dev copy, then `launchctl kickstart -k`
-(a plain bootstrap right after --quit can find the port still held for a
-second, exit 0 with "[lock] another copy..." and NOT be restarted).
+Foreground dev run: stop the agent first with
+`launchctl bootout gui/$(id -u)/com.clipboardhistory.app` (NOT --quit: the
+agent would just be restarted), then `.venv/bin/python main.py`. Back to the
+agent: --quit the dev copy, then `launchctl bootstrap gui/$(id -u)
+~/Library/LaunchAgents/com.clipboardhistory.app.plist` (or ./install_mac.sh).
+
+## Staying on (2026-10-09: "it lost all that history")
+
+Copies made while the app is not running are gone for good, so it must not
+stay off. The agent had KeepAlive SuccessfulExit=false, and a restart that
+found the port still held exited 0 ("[lock] another copy...") - launchd
+took that as a deliberate quit and left it off for days. Now:
+- KeepAlive true + ProcessType Interactive (no background throttling).
+  One plist writer: platform_utils.set_startup_enabled, used by both the
+  tray "Launch at Login" item and install_mac.sh.
+- Under the agent (UNDER_AGENT: XPC_SERVICE_NAME == label) the tray item
+  is "Restart"; any exit is followed by a restart within ~1 s. The real off
+  switch is unticking Launch at Login (boots the agent out).
+- Lock socket uses SO_REUSEADDR on macOS: the old copy's TIME_WAIT
+  connections held 47410 for ~30 s after every restart. A listening copy
+  still blocks a second one (checked). Not on Windows, where it would let
+  two copies share the port. A lock clash under the agent exits 1 so
+  launchd retries.
+- Watchdog thread (agent only): if the Qt event loop misses 12 x 5 s ticks
+  it os._exit(1)s and launchd restarts it. Counts ticks, not clock time,
+  so system sleep is not a hang. Tested by blocking the main thread: exit
+  1 after 65 s. (Testing note: never fake XPC_SERVICE_NAME in a shell -
+  AppKit aborts with 134. Set main.UNDER_AGENT = True instead.)
+- App Nap off (platform_utils.disable_app_nap): a napped app polls late
+  and only sees the last of several quick copies.
+- watcher keeps the last seen changeCount in <data dir>/last_seq; at start,
+  if the clipboard changed meanwhile, the current content is recorded (the
+  only copy macOS keeps).
+
+Spotlight: install_mac.sh also writes ~/Applications/ClipboardHistory.app,
+a tiny osacompile applet that runs `launchctl kickstart` on the agent (or
+bootstraps it if it was booted out). Cmd+Space "ClipboardHistory".
 
 Windows: install.bat -> %LOCALAPPDATA%\ClipboardHistory + private venv +
 Start Menu / Startup shortcuts (no exe: unsigned binaries trip endpoint
