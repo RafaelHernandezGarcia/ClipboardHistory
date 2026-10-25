@@ -616,10 +616,15 @@ def install_outside_click_monitor(widget, callback):
         return
     try:
         from AppKit import NSEvent, NSEventMaskLeftMouseDown, NSEventMaskRightMouseDown
+        from PyQt6.QtGui import QCursor
 
         def _handler(event):
             try:
-                if widget.isVisible():
+                # The monitor also sees clicks on the panel itself (the
+                # first click on a non-activating panel is routed as if it
+                # went to another app), which closed it before the list
+                # got the press. Only clicks outside its frame count.
+                if widget.isVisible() and not widget.frameGeometry().contains(QCursor.pos()):
                     callback()
             except Exception as e:
                 print(f"outside-click: {e}")

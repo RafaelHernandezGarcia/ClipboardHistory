@@ -104,6 +104,9 @@ Two mechanisms, both needed: Qt WindowDeactivate (posted when the panel
 resigns key) and a global NSEvent mouse-down monitor (no permission needed
 for mouse events) in platform_utils.install_outside_click_monitor. The
 hotkey toggles: pressing it while open closes the panel.
+The global monitor also fires for the first click ON the panel (2026-10-25:
+"I often have to click twice"): it hid the panel before the list saw the
+press. It now ignores clicks inside the panel's frameGeometry.
 
 ## Scrolling (2026-09-13 complaint: "scrolls waaaay too fast")
 
