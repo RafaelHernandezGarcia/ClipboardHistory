@@ -553,6 +553,29 @@ def set_startup_enabled(enabled, python_exe, main_py, icon_path=None):
     return False
 
 
+def prefer_tray_icon_position(points_from_right=290):
+    """macOS: start the menu-bar icon near the clock instead of the far left.
+
+    Qt never names its NSStatusItem, so macOS gives it the default
+    "Item-0" and no remembered position: every launch it lands in the
+    leftmost slot, which on a notched MacBook with a busy menu bar is
+    hidden behind the camera notch (seen 2026-11-09). Registering a default
+    position makes macOS place it to the right instead. registerDefaults is
+    in-memory for this process only, so ScreenCapture (same Python, same
+    org.python.python defaults domain, also "Item-0", registered at 250)
+    keeps its own spot, and a position the user sets by Cmd-dragging the
+    icon still wins. Call before creating the QSystemTrayIcon.
+    """
+    if not IS_MACOS:
+        return
+    try:
+        from Foundation import NSUserDefaults
+        NSUserDefaults.standardUserDefaults().registerDefaults_(
+            {"NSStatusItem Preferred Position Item-0": float(points_from_right)})
+    except Exception as exc:
+        print(f"[tray] could not set preferred icon position: {exc}")
+
+
 def set_process_identity():
     """Cosmetics: no Dock icon on macOS, 'ClipboardHistory' (not Python) as
     the toast / taskbar identity on Windows. Call before QApplication."""

@@ -150,3 +150,12 @@ Outside-click dismissal: post a synthetic mouse click elsewhere and check
 - Copying a file from Finder records the paths only; if the file moves the
   item cannot be pasted (write_files drops missing paths).
 - No rich text: text items are stored and pasted as plain text.
+
+## Menu-bar icon hidden behind the camera notch (2026-11-09)
+Qt never names its NSStatusItem, so macOS calls it "Item-0" and puts it in
+the leftmost slot every launch; on a notched MacBook with a full menu bar
+that slot is under the notch. platform_utils.prefer_tray_icon_position()
+registers (in memory only) a position of 290 points from the right before
+the QSystemTrayIcon is created. ScreenCapture does the same at 250: both run
+on the same Python and share the org.python.python domain and the "Item-0"
+name, which is why it must be registerDefaults, never a persisted write.

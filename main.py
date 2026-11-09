@@ -54,6 +54,7 @@ from platform_utils import (
     modifiers_released, prepare_panel_window, focus_panel_window,
     startup_enabled, set_startup_enabled, set_process_identity, pin_as_accessory_app,
     install_outside_click_monitor, disable_app_nap, BUNDLE_ID,
+    prefer_tray_icon_position,
 )
 
 # launchd sets XPC_SERVICE_NAME to the job label. Under the LaunchAgent any
@@ -138,6 +139,7 @@ class ClipboardHistoryApp:
         return icon
 
     def _setup_tray(self):
+        prefer_tray_icon_position()  # macOS: keep it out from behind the notch
         self.tray = QSystemTrayIcon()
         self.tray.setIcon(self._app_icon())
         menu = QMenu()
